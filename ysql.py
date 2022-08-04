@@ -27,12 +27,18 @@ class Table:
         self.ent = ent
         self.type = type
 
+class CondOperand:
+    COND__TYPE_LITERAL = 0
+    COND_ENTITY_TYPE_ENTITY = 1
+    def __init__(self, ent, type):
+        self.ent = ent
+        self.type = type
 class Cond:
     def __init__(self, left, op, right, cond_groups = None):
         self.left = left
         self.right = right
         self.op = op
-        self.cond_groups: List[CondGroup] = cond_groups #[CondGroup]
+        self.cond_groups: List[CondGroup] = cond_groups
     def __str__(self):
         if self.cond_groups is not None:
             return "({})".format(" OR ".join([str(cg) for cg in self.cond_groups]))
@@ -48,7 +54,7 @@ class CondGroup:
         return " AND ".join([str(cond) for cond in self.conds])
 
 class Select:
-    def __init__(self, columns: List[Column], tables: List[Table], where = List[CondGroup]):
+    def __init__(self, columns: List[Column], tables: List[Table], where: List[CondGroup]):
         self.columns = columns or []
         self.tables = tables or []
         self.where = where or []
@@ -60,6 +66,86 @@ class Select:
 def p_statement(p):
     """statement : select"""
     p[0] = p[1]
+def p_select(p):
+    """
+    select : SELECT columns FROM tables
+    """
+    se = Select(p[2], p[4])
+def p_columns(p):
+    """
+    columns : column
+            | columns COMMA column
+    """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1]
+        p[0].append(p[3])
+def p_column(p):
+    """
+    column : IDENTIFIER
+           | IDENTIFIER IDENTIFIER
+           | IDENTIFIER AS IDENTIFIER
+    """
+    # SUBS_ID or SUBS.SUBS_ID
+    if len(p) == 2:
+        p[0] = Column(p[1].split('.')[-1], p[1], Column.COLUMN_TYPE_ENTITY)
+    # SUBS_ID ID or SUBS.SUBS_ID ID
+    elif len(p) == 3:
+        p[0] = Column(p[2], p[1], Column.COLUMN_TYPE_ENTITY)
+    # SUBS_ID AS ID or SUBS.SUBS_ID as ID
+    else:
+        p[0] = Column(p[3], p[1], Column.COLUMN_TYPE_ENTITY)
+def p_literal_column(p):
+    """
+    column : NUMBER
+           | FLOAT
+           | STRING
+    """
+    p[0] = Column(str(p[1]), p[1], Column.COLUMN_TYPE_LITERAL)
+def p_tables(p):
+    """
+    tables : table
+           | tables COMMA table
+    """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1]
+        p[0].append(p[2])
+def p_table(p):
+    """
+    table : IDENTIFIER
+          | IDENTIFIER IDENTIFIER
+    """
+    if len(p) == 2:
+        p[0] = Table(p[1].split('.')[-1], p[1], Table.TABLE_TYPE_TABLE)
+    else:
+        p[0] = Table(p[2], p[1], Table.TABLE_TYPE_TABLE)
+def p_dual_table(p):
+    """
+    table : DUAL
+    """
+    p[0] = Table("DUAL", "DUAL", Table.TABLE_TYPE_DUAL)
+def p_subselect_table(p):
+    """
+    table : LPAREN select RPAREN
+          | LPAREN select RPAREN IDENTIFIER
+    """
+    if len(p) == 4:
+        p[0] = Column("__SUBSELECT__", p[2], Table.TABLE_TYPE_SUBSELECT)
+    else:
+        p[0] = Column(p[4], p[2], Table.TABLE_TYPE_SUBSELECT)
+def p_where(p):
+    """
+    where : WHERE conds
+    """
+    p[0] = p[2]
+def p_conds(p):
+    """
+    conds : cond
+          | 
+    """
 def p_select(p):
     """select : basic_select
               | select_where
