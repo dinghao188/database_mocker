@@ -1,12 +1,13 @@
-from typing import Dict, List
+from typing import List
+from ply import lex, yacc
 
 """-----------------for lex--------------------"""
-from ply import lex
 import database_mocker.common_lex
-lexer: lex.Lexer = lex.lex(module=database_mocker.common_lex)
+lexer = lex.lex(module=database_mocker.common_lex)
+from database_mocker.common_lex import tokens
 
-"""-----------------for yacc------------------"""
-from ply import yacc
+"""-----------------for yacc-------------------"""
+from ply import lex, yacc
 
 class Column:
     COLUMN_TYPE_LITERAL = 0
@@ -16,25 +17,31 @@ class Column:
         self.name = name
         self.value = value
         self.type = type
+    def __str__(self):
+        return "{}, {}".format(self.name, self.value)
 
 class Table:
-    TABLE_TYPE_DUAL = 0
-    TABLE_TYPE_TABLE = 1
-    TABLE_TYPE_SUBSELECT = 2
+    TABLE_TYPE_TABLE = 0
+    TABLE_TYPE_SUBSELECT = 1
 
     def __init__(self, name, ent, type):
         self.name = name
         self.ent = ent
         self.type = type
+    def __str__(self):
+        return "{}, {}".format(self.name, self.ent)
 
 class CondOperand:
-    COND__TYPE_LITERAL = 0
-    COND_ENTITY_TYPE_ENTITY = 1
+    COND_OPERAND_TYPE_LITERAL = 0
+    COND_OPERAND_TYPE_ENTITY = 1
+    COND_OPERAND_TYPE_PARAM = 2
     def __init__(self, ent, type):
         self.ent = ent
         self.type = type
+    def __str__(self):
+        return str(self.ent)
 class Cond:
-    def __init__(self, left, op, right, cond_groups = None):
+    def __init__(self, left: CondOperand = None, op = None, right: CondOperand = None, cond_groups = None):
         self.left = left
         self.right = right
         self.op = op
@@ -69,8 +76,12 @@ def p_statement(p):
 def p_select(p):
     """
     select : SELECT columns FROM tables
+           | SELECT columns FROM tables WHERE conds
     """
-    se = Select(p[2], p[4])
+    if len(p) == 5:
+        p[0] = Select(p[2], p[4], [])
+    elif len(p) == 7:
+        p[0] = Select(p[2], p[4], p[6])
 def p_columns(p):
     """
     columns : column
@@ -83,24 +94,29 @@ def p_columns(p):
         p[0].append(p[3])
 def p_column(p):
     """
-    column : IDENTIFIER
-           | IDENTIFIER IDENTIFIER
-           | IDENTIFIER AS IDENTIFIER
+    column : column_v
+           | column_v IDENTIFIER
+           | column_v AS IDENTIFIER
     """
-    # SUBS_ID or SUBS.SUBS_ID
+    p[0] = p[1]
     if len(p) == 2:
-        p[0] = Column(p[1].split('.')[-1], p[1], Column.COLUMN_TYPE_ENTITY)
+        pass
     # SUBS_ID ID or SUBS.SUBS_ID ID
     elif len(p) == 3:
-        p[0] = Column(p[2], p[1], Column.COLUMN_TYPE_ENTITY)
+        p[1].name = p[2]
     # SUBS_ID AS ID or SUBS.SUBS_ID as ID
-    else:
-        p[0] = Column(p[3], p[1], Column.COLUMN_TYPE_ENTITY)
+    elif len(p) == 4:
+        p[1].name = p[3]
+def p_normal_column(p):
+    """
+    column_v : IDENTIFIER
+    """
+    p[0] = Column(p[1].split('.')[-1], p[1], Column.COLUMN_TYPE_ENTITY)
 def p_literal_column(p):
     """
-    column : NUMBER
-           | FLOAT
-           | STRING
+    column_v : INTEGER
+             | FLOAT
+             | STRING
     """
     p[0] = Column(str(p[1]), p[1], Column.COLUMN_TYPE_LITERAL)
 def p_tables(p):
@@ -112,7 +128,7 @@ def p_tables(p):
         p[0] = [p[1]]
     else:
         p[0] = p[1]
-        p[0].append(p[2])
+        p[0].append(p[3])
 def p_table(p):
     """
     table : IDENTIFIER
@@ -122,11 +138,6 @@ def p_table(p):
         p[0] = Table(p[1].split('.')[-1], p[1], Table.TABLE_TYPE_TABLE)
     else:
         p[0] = Table(p[2], p[1], Table.TABLE_TYPE_TABLE)
-def p_dual_table(p):
-    """
-    table : DUAL
-    """
-    p[0] = Table("DUAL", "DUAL", Table.TABLE_TYPE_DUAL)
 def p_subselect_table(p):
     """
     table : LPAREN select RPAREN
@@ -144,31 +155,9 @@ def p_where(p):
 def p_conds(p):
     """
     conds : cond
-          | 
+          | conds AND cond
+          | conds OR cond
     """
-def p_select(p):
-    """select : basic_select
-              | select_where
-              | select_orderby"""
-    p[0] = p[1]
-def p_basic_select(p):
-    """basic_select : SELECT select_columns FROM tables"""
-    se = Select(p[2], p[4])
-    p[0] = se
-def p_select_where(p):
-    """select_where : select WHERE conds"""
-    p[0] = p[1]
-    p[0].where = p[3]
-def p_select_orderby(p):
-    """select_orderby : basic_select ORDERBY ENTITY
-                      | select_where ORDERBY ENTITY"""
-    pass
-
-# WHERE A.COLUMN = B.COLUMN AND (A.COLUMN > C.COLUMN OR B.COLUMN > C.COLUMN)
-def p_conds(p):
-    """conds : cond
-             | conds AND cond
-             | conds OR cond"""
     if len(p) == 2:
         p[0] = [CondGroup(p[1]),]
     else:
@@ -177,81 +166,43 @@ def p_conds(p):
             p[0][-1].append(p[3])
         elif p[2] == "OR":
             p[0].append(CondGroup(p[3]))
+def p_cond(p):
+    """
+    cond : cond_operand EQ cond_operand
+         | cond_operand NE cond_operand
+         | cond_operand LT cond_operand
+         | cond_operand GT cond_operand
+    """
+    p[0] = Cond(left=p[1], op=p[2], right=p[3])
+def p_cond_combine(p):
+    """
+    cond : LPAREN conds RPAREN
+    """
+    p[0] = Cond(cond_groups=p[2])
+def p_cond_operand_literal(p):
+    """
+    cond_operand : STRING
+                 | INTEGER
+                 | FLOAT
+    """
+    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_LITERAL)
+def p_cond_operand_entity(p):
+    """
+    cond_operand : IDENTIFIER
+    """
+    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_ENTITY)
+def p_cond_operand_param(p):
+    """
+    cond_operand : param
+    """
+    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_PARAM)
+def p_param(p):
+    """
+    param : COLON IDENTIFIER
+    """
+    p[0] = p[2]
 
-def p_cond_entity(p):
-    """cond_entity : ENTITY
-                   | NUMBER
-                   | STRING"""
-    p[0] = p[1]
-def p_basic_cond(p):
-    """cond : cond_entity EQ cond_entity
-            | cond_entity NE cond_entity
-            | cond_entity LT cond_entity
-            | cond_entity GT cond_entity"""
-    p[0] = Cond(p[1], p[2], p[3], None)
-def p_combine_cond(p):
-    """cond : LPAREN conds RPAREN"""
-    p[0] = Cond("", "", "", p[2])
-def p_select_columns(p):
-    """select_columns : column
-                      | select_columns COMMA column"""
-    if len(p) == 2:
-        p[0] = { p[1][0]: p[1][1] }
-    else:
-        p[1][p[3][0]] = p[3][1]
-        p[0] = p[1]
-def p_column(p):
-    """column : ENTITY
-              | ENTITY ENTITY
-              | ENTITY AS ENTITY"""
-    def get_col_name(s):
-        sp = s.split(".")
-        if len(sp) == 1:
-            return sp[0]
-        else:
-            return sp[1]
-    if len(p) == 2:
-        p[0] = (get_col_name(p[1]), p[1])
-    elif len(p) == 3:
-        p[0] = (get_col_name(p[2]), p[1])
-    elif len(p) == 4:
-        p[0] = (get_col_name(p[3]), p[1]) 
-def p_literal_column(p):
-    """column : NUMBER
-              | STRING
-              | NUMBER ENTITY
-              | NUMBER AS ENTITY
-              | STRING ENTITY
-              | STRING AS ENTITY"""
-    if len(p) == 2:
-        p[0] = (str(p[1]), p[1])
-    elif len(p) == 3:
-        p[0] = (str(p[2]), p[1])
-    elif len(p) == 4:
-        p[0] = (str(p[3]), p[1])
-def p_tables(p):
-    """tables : table
-              | tables COMMA table
-              | subselect
-              | tables COMMA subselect"""
-    if len(p) == 2:
-        p[0] = { p[1][0]: p[1][1] }
-    else:
-        p[1][p[3][0]] = p[3][1]
-        p[0] = p[1]
-def p_table(p):
-    "table : ENTITY"
-    p[0] = ( p[1], p[1] )
-def p_table_alias(p):
-    "table : ENTITY ENTITY"
-    p[0] = ( p[2], p[1] )
-def p_subselect(p):
-    "subselect : LPAREN select RPAREN"
-    p[0] = ( "__NOALIAS__", p[2] )
-def p_subselect_alias(p):
-    "subselect : LPAREN select RPAREN ENTITY"
-    p[0] = ( p[4], p[2] )
+def p_error(p):
+    pass
 
-# parser = yacc.yacc()
-
-__all__ = ["Select", "Cond", "CondGroup", "parser"]
+parser = yacc.yacc()

@@ -1,3 +1,5 @@
+from ply import lex
+
 #keywords, type aka value
 single_keywords = [
     "SELECT",
@@ -43,9 +45,10 @@ def t_COUNT(t):
 tokens = [
     "IDENTIFIER", #basic identifier for table name, column name , etc.
     "INTEGER",    #literal interger
-    "FLOAT"       #literal float
+    "FLOAT",      #literal float
     "STRING",     #literal string
     "COMMA",      #,
+    "COLON",      #:
     "STAR",       #*
     "LPAREN",     #(
     "RPAREN",     #)
@@ -61,6 +64,7 @@ tokens = [
 t_ignore = ' \t\n'
 
 t_COMMA = r','
+t_COLON = r':'
 t_STAR = r'\*'
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
