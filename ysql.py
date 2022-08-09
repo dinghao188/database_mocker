@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from ply import lex, yacc
 
 """-----------------for lex--------------------"""
@@ -31,6 +31,16 @@ class Table:
     def __str__(self):
         return "{}, {}".format(self.name, self.ent)
 
+class Value:
+    VALUE_TYPE_LITERAL = 0
+    VALUE_TYPE_COLUMN = 1
+    VALUE_TYPE_PARAM = 2
+    def __init__(self, ent, type):
+        self.ent = ent
+        self.type = type
+    def __str__(self):
+        return str(self.ent)
+
 class CondOperand:
     COND_OPERAND_TYPE_LITERAL = 0
     COND_OPERAND_TYPE_ENTITY = 1
@@ -41,7 +51,7 @@ class CondOperand:
     def __str__(self):
         return str(self.ent)
 class Cond:
-    def __init__(self, left: CondOperand = None, op = None, right: CondOperand = None, cond_groups = None):
+    def __init__(self, left: Value = None, op = None, right: Value = None, cond_groups = None):
         self.left = left
         self.right = right
         self.op = op
@@ -61,25 +71,74 @@ class CondGroup:
         return " AND ".join([str(cond) for cond in self.conds])
 
 class Select:
-    def __init__(self, columns: List[Column], tables: List[Table], where: List[CondGroup]):
+    def __init__(self, columns: List[Column], tables: List[Table], where: List[CondGroup] = None, params: List[str] = None):
         self.columns = columns or []
         self.tables = tables or []
         self.where = where or []
+        self.params = params or []
     def fetch_data(self):
         pass
+    
+class Insert:
+    def __init__(self, table: str, columns: List[Column], values: List[Value], params: List[str] = None):
+        self.table = table
+        self.columns = columns
+        self.values = values
+        self.params = params or []
 
-
+# 解析某个SQL获得的参数
+params = {}
 
 def p_statement(p):
-    """statement : select"""
+    """
+    statement : select
+              | insert
+    """
     p[0] = p[1]
+    p[0].params = params.copy()
+    params.clear()
+def p_insert(p):
+    """
+    insert : INSERT_INTO table LPAREN columns RPAREN VALUES LPAREN values RPAREN
+    """
+    table = p[2]
+    columns = p[4]
+    values = p[8]
+    p[0] = Insert(table, columns, values)
+def p_values(p):
+    """
+    values : value
+           | values COMMA value
+    """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1]
+        p[0].append(p[3])
+def p_literal_value(p):
+    """
+    value : INTEGER
+          | FLOAT
+          | STRING
+    """
+    p[0] = Value(p[1], Value.VALUE_TYPE_LITERAL)
+def p_column_value(p):
+    """
+    value : IDENTIFIER
+    """
+    p[0] = Value(p[1], Value.VALUE_TYPE_COLUMN)
+def p_param_value(p):
+    """
+    value : param
+    """
+    p[0] = Value(p[1], Value.VALUE_TYPE_PARAM)
 def p_select(p):
     """
     select : SELECT columns FROM tables
            | SELECT columns FROM tables WHERE conds
     """
     if len(p) == 5:
-        p[0] = Select(p[2], p[4], [])
+        p[0] = Select(p[2], p[4])
     elif len(p) == 7:
         p[0] = Select(p[2], p[4], p[6])
 def p_columns(p):
@@ -185,21 +244,22 @@ def p_cond_operand_literal(p):
                  | INTEGER
                  | FLOAT
     """
-    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_LITERAL)
+    p[0] = Value(p[1], Value.VALUE_TYPE_LITERAL)
 def p_cond_operand_entity(p):
     """
     cond_operand : IDENTIFIER
     """
-    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_ENTITY)
+    p[0] = Value(p[1], Value.VALUE_TYPE_COLUMN)
 def p_cond_operand_param(p):
     """
     cond_operand : param
     """
-    p[0] = CondOperand(p[1], CondOperand.COND_OPERAND_TYPE_PARAM)
+    p[0] = Value(p[1], Value.VALUE_TYPE_PARAM)
 def p_param(p):
     """
     param : COLON IDENTIFIER
     """
+    params[p[2]] = None
     p[0] = p[2]
 
 def p_error(p):

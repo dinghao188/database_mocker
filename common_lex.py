@@ -8,6 +8,7 @@ single_keywords = [
     "FROM",
     "WHERE",
     "HAVING",
+    "VALUES",
     "AS",
     "AND",
     "OR",

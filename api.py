@@ -1,4 +1,4 @@
-from typing import List,Dict
+from typing import List,Dict,Union
 from database_mocker.database import *
 import database_mocker.ysql as ysql
 
@@ -16,34 +16,57 @@ def Attach(db_name) -> int:
     __session_id += 1
     return old_id
 def Detach(session_id: int):
-    print("Detach", session_id)
-    print("Detach", SESSIONS.keys())
     if session_id in SESSIONS.keys():
         SESSIONS.pop(session_id)
 def SetSQL(session_id: int, sql: str) -> List[str]:
     ans = []
-    if session_id in SESSIONS.keys():
-        session = SESSIONS[session_id]
-        session.clear()
-        session.stmt = ysql.parser.parse(sql)
+    if session_id not in SESSIONS.keys():
+        return ans
+    session = SESSIONS[session_id]
+    session.clear()
+    session.stmt = ysql.parser.parse(sql)
+    if isinstance(session.stmt, ysql.Select):
         for column in session.stmt.columns:
-            column_tmp = column.split(".")
-            if len(column_tmp) == 2:
-                ans.append(column_tmp[1])
-            else:
-                ans.append(column_tmp[0])
+            ans.append(column.name)
     return ans
 def Execute(session_id: int) -> int:
-    if session_id not in SESSIONS.keys():
-        return 1
-    session = SESSIONS[session_id]
-    if session.stmt is None:
-        return 2
-    session.cursor_data = DBS[session.db_name].execute_select(session.stmt)
-    return 0
+    import traceback
+    try:
+        print("Execute", session_id, DBS, SESSIONS)
+        if session_id not in SESSIONS.keys():
+            return 1
+        session = SESSIONS[session_id]
+        if session.stmt is None:
+            return 2
+        if isinstance(session.stmt, ysql.Select):
+            session.cursor_data = DBS[session.db_name].execute_select(session.stmt)
+            return 0
+        elif isinstance(session.stmt, ysql.Insert):
+            return DBS[session.db_name].execute_insert(session.stmt)
+    except Exception as e:
+        traceback.print_exc()
+        return 3
 def FetchOne(session_id: int) -> Dict[str, str]:
     if session_id not in SESSIONS.keys():
         return {}
     session = SESSIONS[session_id]
     record = session.fetchone() or {}
     return record
+
+def __SetParameter(session_id: int, param: str, val: Union[int,float,str,None]):
+    if session_id not in SESSIONS.keys():
+        return False
+    session = SESSIONS[session_id]
+    if param not in session.stmt.params.keys():
+        return False
+    session.stmt.params[param] = val
+    return True
+
+def SetParameterNULL(session_id: int, param: str):
+    __SetParameter(session_id, param, None)
+def SetParameterDouble(session_id: int, param: str, val: float):
+    __SetParameter(session_id, param, val)
+def SetParameterInteger(session_id: int, param: str, val: int):
+    __SetParameter(session_id, param, val)
+def SetParameterString(session_id: int, param: str, val: str):
+    __SetParameter(session_id, param, val)

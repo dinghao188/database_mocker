@@ -1,6 +1,6 @@
 import database_mocker.ysql as ysql
 import itertools
-from typing import List,Dict
+from typing import List,Dict,Tuple
 
 __all__ = ["Table", "Database", "Session", "DBS", "SESSIONS"]
 
@@ -45,13 +45,15 @@ class Database:
             seq.clear()
     def create_table(self, table):
         self.tables[table.name] = table
-    def create_sequence(self, sequence):
-        self.sequences[sequence.name] = sequence
+    def create_sequence(self, name: str, init_val: int, step: int):
+        self.sequences[name] = Sequence(name, init_val, step)
 
     def execute(self, sql: str):
         stmt = ysql.parser.parse(sql)
         if isinstance(stmt, ysql.Select):
             return self.execute_select(stmt)
+        elif isinstance(stmt, ysql.Insert):
+            return self.execute_insert(stmt)
         else:
             return "NoThing!!!!!!!!!!!!!!"
     def execute_select(self, select: ysql.Select):
@@ -62,7 +64,7 @@ class Database:
             __product_records.append([])
             for rec in recs:
                 __product_records[-1].append({ table: rec })
-        def record_product_to_dict(product: tuple[Dict]):
+        def record_product_to_dict(product: Tuple[Dict]):
             ans = {}
             for factor in product:
                 ans.update(factor)
@@ -71,7 +73,7 @@ class Database:
         
         ret_records = []
         for rec in product_records_generator:
-            if self.__where_filter(select.where, rec):
+            if self.__where_filter(select.where, rec, select.params):
                 ret_rec = {}
                 for res_column in select.columns:
                     # literal column result
@@ -80,7 +82,7 @@ class Database:
                         continue
 
                     tmp = res_column.value.split(".")
-                    table_ref = None
+                    table_ref = list(rec.keys())[0]
                     column_ref = tmp[-1]
                     if len(tmp) == 2:
                         table_ref = tmp[0]
@@ -114,7 +116,7 @@ class Database:
             else:
                 all_records[table.name] = self.tables[table.ent].get_all_records()
         return all_records
-    def __where_filter(self, where: List[ysql.CondGroup], data: Dict):
+    def __where_filter(self, where: List[ysql.CondGroup], data: Dict, params: Dict[str, str]):
         """
         根据sql中的where条件对数据进行过滤，其中data的格式参考函数__fetch_data
         @return True: 该数据满足where条件
@@ -133,11 +135,13 @@ class Database:
             "IS": lambda left, right: left is right,
             "IS NOT": lambda left, right: left is not right
         }
-        # 提取条件列的值: 因为条件列可能有多种形式，1. 数字 2. 字符串 3. 表字段
-        def extract_cond_value(cond_operand: ysql.CondOperand):
-            if cond_operand.type == cond_operand.COND_OPERAND_TYPE_LITERAL:
+        # 提取条件列的值: 因为条件列可能有多种形式，1. 数字 2. 字符串 3. 表字段 4. 参数 
+        def extract_cond_value(cond_operand: ysql.Value):
+            if cond_operand.type == ysql.Value.VALUE_TYPE_LITERAL:
                 return cond_operand.ent
-            else:
+            elif cond_operand.type == ysql.Value.VALUE_TYPE_PARAM:
+                return params[cond_operand.ent]
+            elif cond_operand.type == ysql.Value.VALUE_TYPE_COLUMN:
                 cond_detail = cond_operand.ent.split(".")
                 column = cond_detail[-1]
                 table = list(data.keys())[0]
@@ -159,6 +163,10 @@ class Database:
             if match:
                 return True
         return False
+
+    def execute_insert(insert: ysql.Insert) -> int:
+        # TODO
+        return 0
 
     def __getitem__(self, table_name) -> Table:
         return self.tables[table_name]
