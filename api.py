@@ -8,7 +8,7 @@ __session_id = 1
 
 def Attach(db_name) -> int:
     global __session_id
-    print("Attach", __session_id, DBS)
+    print("Attach", db_name, __session_id, DBS)
     if db_name not in DBS.keys(): 
         return 0
     SESSIONS[__session_id] = Session(__session_id, db_name)
@@ -24,7 +24,7 @@ def SetSQL(session_id: int, sql: str) -> List[str]:
         return ans
     session = SESSIONS[session_id]
     session.clear()
-    session.stmt = ysql.parser.parse(sql)
+    session.stmt = ysql.parser.parse(sql.upper())
     if isinstance(session.stmt, ysql.Select):
         for column in session.stmt.columns:
             ans.append(column.name)
@@ -46,11 +46,17 @@ def Execute(session_id: int) -> int:
     except Exception as e:
         traceback.print_exc()
         return 3
-def FetchOne(session_id: int) -> Dict[str, str]:
+def FetchOne(session_id: int) -> Dict[str, Union[str, int]]:
     if session_id not in SESSIONS.keys():
         return {}
     session = SESSIONS[session_id]
     record = session.fetchone() or {}
+    return record
+def FetchOneWithOrder(session_id: int) -> List[Union[str, int]]:
+    if session_id not in SESSIONS.keys():
+        return []
+    session = SESSIONS[session_id]
+    record = session.fetchone_with_order() or []
     return record
 
 def __SetParameter(session_id: int, param: str, val: Union[int,float,str,None]):

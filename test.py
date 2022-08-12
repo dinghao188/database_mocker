@@ -65,13 +65,10 @@ def test_param():
 
 def test_database():
     db = Database("CC")
-    db.create_table(Table(
-        "SUBS",
-        ("SUBS_ID", "SUBS_NAME", "SUBS_SEQ")))
-    db.create_table(Table(
-        "PROD",
-        ("PROD_ID", "OFFER_ID", "PROD_SEQ")))
+    db.create_table("SUBS", ("SUBS_ID", "SUBS_NAME", "SUBS_SEQ"))
+    db.create_table("PROD", ("PROD_ID", "OFFER_ID", "PROD_SEQ"))
     db.create_sequence("ID_SEQ", 0, 10)
+
     db["SUBS"].insert_record([
         (0, "dinghao", 0),
         (1, "dinghaoyan", 0)])
@@ -88,14 +85,12 @@ def test_database():
     print(db.execute("SELECT 1,2 FROM DUAL"))
 
 def test_api():
+    print("=====================test_api=============================")
     db = Database("CC")
-    db.create_table(Table(
-        "SUBS",
-        ("SUBS_ID", "SUBS_NAME", "SUBS_SEQ")))
-    db.create_table(Table(
-        "PROD",
-        ("PROD_ID", "OFFER_ID", "PROD_SEQ")))
+    db.create_table("SUBS", ("SUBS_ID", "SUBS_NAME", "SUBS_SEQ"))
+    db.create_table("PROD", ("PROD_ID", "OFFER_ID", "PROD_SEQ"))
     db.create_sequence("ID_SEQ", 0, 10)
+
     db["SUBS"].insert_record([
         (0, "dinghao", 0),
         (1, "dinghaoyan", 0)])
@@ -120,3 +115,24 @@ def test_api():
     print(api.FetchOne(si))
     print(api.FetchOne(si))
     api.Detach(si)
+    
+    print("====> FetchOneWithOrder")
+    si = api.Attach("CC")
+    api.SetSQL(si, "SELECT SUBS_ID, SUBS_NAME FROM SUBS")
+    api.Execute(si)
+    print(api.FetchOneWithOrder(si))
+    print(api.FetchOneWithOrder(si))
+    api.Detach(si)
+    print("======================================================")
+
+def test_foo():
+    db = Database("CC")
+    db.create_table("OCS_SESSION", ("SESSION_ID", "EXT_ATTR"))
+    db["OCS_SESSION"].insert_record({
+        "SESSION_ID": "jfkdajfdsjalfjk",
+        "EXT_ATTR": "something"
+    })
+    db["OCS_SESSION"].insert_record({
+        "SESSION_ID": "abcdef",
+    })
+    print(db.execute("SELECT SESSION_ID, NVL(EXT_ATTR, 'nothing') EXT_ATTR FROM OCS_SESSION"))

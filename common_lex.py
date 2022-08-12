@@ -30,15 +30,17 @@ def t_ORDER_BY(t):
 #function
 function = [
     "MAX",
-    "COUNT"
+    "COUNT",
+    "NVL"
 ]
 def t_MAX(t):
-    r'MAX\(.+\)'
-    t.value = ("MAX", t.value.split('(')[1].split(')')[0])
+    r'MAX'
     return t
 def t_COUNT(t):
-    r'COUNT\(.+\)'
-    t.value = ("COUNT", t.value.split("(")[1].split(")")[0])
+    r'COUNT'
+    return t
+def t_NVL(t):
+    r'NVL'
     return t
 
 

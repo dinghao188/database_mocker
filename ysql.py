@@ -12,6 +12,7 @@ from ply import lex, yacc
 class Column:
     COLUMN_TYPE_LITERAL = 0
     COLUMN_TYPE_ENTITY = 1
+    COLUMN_TYPE_FUNCTION = 2
 
     def __init__(self, name, value, type):
         self.name = name
@@ -19,6 +20,11 @@ class Column:
         self.type = type
     def __str__(self):
         return "{}, {}".format(self.name, self.value)
+
+class Function:
+    def __init__(self, name, params: List = None):
+        self.name = name
+        self.params = params
 
 class Table:
     TABLE_TYPE_TABLE = 0
@@ -178,6 +184,11 @@ def p_literal_column(p):
              | STRING
     """
     p[0] = Column(str(p[1]), p[1], Column.COLUMN_TYPE_LITERAL)
+def p_function_column(p):
+    """
+    column_v : function
+    """
+    p[0] = Column(p[1].name, p[1], Column.COLUMN_TYPE_FUNCTION)
 def p_tables(p):
     """
     tables : table
@@ -261,7 +272,16 @@ def p_param(p):
     """
     params[p[2]] = None
     p[0] = p[2]
-
+def p_function(p):
+    """
+    function : func_nvl
+    """
+    p[0] = p[1]
+def p_func_nvl(p):
+    """
+    func_nvl : NVL LPAREN IDENTIFIER COMMA column_v RPAREN
+    """
+    p[0] = Function("NVL", [p[3], p[5]])
 def p_error(p):
     pass
 

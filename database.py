@@ -1,18 +1,24 @@
 import database_mocker.ysql as ysql
 import itertools
-from typing import List,Dict,Tuple
+from typing import List,Dict,Tuple,Union
 
 __all__ = ["Table", "Database", "Session", "DBS", "SESSIONS"]
 
 class Table:
-    def __init__(self, name, columns, records = None):
+    def __init__(self, name: str, columns: Tuple[str], records: List[Tuple] = None):
         self.name = name
         self.columns = columns
         self.records = records or []
     def clear(self):
         self.records = []
-    def insert_record(self, datas = []):
-        self.records.extend(datas)
+    def insert_record(self, data: Dict[str, Union[str,int]]):
+        record = []
+        for col in self.columns:
+            if col in data.keys():
+                record.append(data[col])
+            else:
+                record.append(None)
+        self.records.append(record)
     def get_all_records(self):
         res = []
         for record in self.records:
@@ -43,8 +49,8 @@ class Database:
             table.clear()
         for seq in self.sequences.values():
             seq.clear()
-    def create_table(self, table):
-        self.tables[table.name] = table
+    def create_table(self, table_name: str, columns: Tuple[str], data: List[Tuple] = None):
+        self.tables[table_name] = Table(table_name, columns, data)
     def create_sequence(self, name: str, init_val: int, step: int):
         self.sequences[name] = Sequence(name, init_val, step)
 
@@ -81,17 +87,30 @@ class Database:
                         ret_rec[res_column.name] = res_column.value
                         continue
 
-                    tmp = res_column.value.split(".")
-                    table_ref = list(rec.keys())[0]
-                    column_ref = tmp[-1]
-                    if len(tmp) == 2:
-                        table_ref = tmp[0]
-                    #SEQ.NEXTVAL
-                    if res_column.value.endswith(".NEXTVAL"):
-                        ret_rec[res_column.name] = str(self.sequences[table_ref].nextval())
-                    #TABLE.COLUMN
+                    def extract_column_value(column_name: str):
+                        tmp = column_name.split(".")
+                        table_ref = list(rec.keys())[0]
+                        column_ref = tmp[-1]
+                        if len(tmp) == 2:
+                            table_ref = tmp[0]
+                        #SEQ.NEXTVAL
+                        if column_name.endswith(".NEXTVAL"):
+                            return self.sequences[table_ref].nextval()
+                        #TABLE.COLUMN
+                        else:
+                            return rec[table_ref][column_ref]
+
+                    if res_column.type == ysql.Column.COLUMN_TYPE_FUNCTION:
+                        value = None
+                        #NVL(XXXX, default)
+                        if res_column.value.name == "NVL":
+                            value = extract_column_value(res_column.value.params[0])
+                            value = value or res_column.value.params[1].value
+
+                        ret_rec[res_column.name] = value
                     else:
-                        ret_rec[res_column.name] = str(rec[table_ref][column_ref])
+                        value = extract_column_value(res_column.value)
+                        ret_rec[res_column.name] = value
                 ret_records.append(ret_rec)
         return ret_records
 
@@ -184,12 +203,19 @@ class Session:
         self.cursor_data = None
         self.cursor_pos = 0
     def fetchone(self):
+        if not isinstance(self.stmt, ysql.Select):
+            return None
         if self.cursor_data is None or self.cursor_pos >= len(self.cursor_data):
             return None
         data = self.cursor_data[self.cursor_pos]
         self.cursor_pos += 1
         return data
+    def fetchone_with_order(self):
+        data = self.fetchone() or {}
+        ret = []
+        for col in self.stmt.columns:
+            ret.append(data[col.name])
+        return ret
 
-            
 DBS: Dict[str, Database] = {}
 SESSIONS: Dict[int, Session] = {}
