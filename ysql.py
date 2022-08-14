@@ -9,15 +9,22 @@ from database_mocker.common_lex import tokens
 """-----------------for yacc-------------------"""
 from ply import lex, yacc
 
-class Column:
-    COLUMN_TYPE_LITERAL = 0
-    COLUMN_TYPE_ENTITY = 1
-    COLUMN_TYPE_FUNCTION = 2
 
-    def __init__(self, name, value, type):
+class Value:
+    VALUE_TYPE_LITERAL = 0
+    VALUE_TYPE_COLUMN = 1
+    VALUE_TYPE_PARAM = 2
+    VALUE_TYPE_FUNCTION = 3
+    def __init__(self, ent, type):
+        self.ent = ent
+        self.type = type
+    def __str__(self):
+        return str(self.ent)
+
+class Column:
+    def __init__(self, name: str, value: Value):
         self.name = name
         self.value = value
-        self.type = type
     def __str__(self):
         return "{}, {}".format(self.name, self.value)
 
@@ -37,20 +44,7 @@ class Table:
     def __str__(self):
         return "{}, {}".format(self.name, self.ent)
 
-class Value:
-    VALUE_TYPE_LITERAL = 0
-    VALUE_TYPE_COLUMN = 1
-    VALUE_TYPE_PARAM = 2
-    def __init__(self, ent, type):
-        self.ent = ent
-        self.type = type
-    def __str__(self):
-        return str(self.ent)
-
 class CondOperand:
-    COND_OPERAND_TYPE_LITERAL = 0
-    COND_OPERAND_TYPE_ENTITY = 1
-    COND_OPERAND_TYPE_PARAM = 2
     def __init__(self, ent, type):
         self.ent = ent
         self.type = type
@@ -77,20 +71,20 @@ class CondGroup:
         return " AND ".join([str(cond) for cond in self.conds])
 
 class Select:
-    def __init__(self, columns: List[Column], tables: List[Table], where: List[CondGroup] = None, params: List[str] = None):
+    def __init__(self, columns: List[Column], tables: List[Table], where: List[CondGroup] = None, params = None):
         self.columns = columns or []
         self.tables = tables or []
         self.where = where or []
-        self.params = params or []
+        self.params = params or {}
     def fetch_data(self):
         pass
     
 class Insert:
-    def __init__(self, table: str, columns: List[Column], values: List[Value], params: List[str] = None):
+    def __init__(self, table: str, columns: List[Column], values: List[Value], params = None):
         self.table = table
         self.columns = columns
         self.values = values
-        self.params = params or []
+        self.params = params or {}
 
 # 解析某个SQL获得的参数
 params = {}
@@ -103,6 +97,17 @@ def p_statement(p):
     p[0] = p[1]
     p[0].params = params.copy()
     params.clear()
+def p_select(p):
+    """
+    select : SELECT columns FROM tables
+           | SELECT columns FROM tables WHERE conds
+    """
+    columns = p[2]
+    tables = p[4]
+    conds = None
+    if len(p) == 7:
+        conds = p[6]
+    p[0] = Select(columns, tables, conds)
 def p_insert(p):
     """
     insert : INSERT_INTO table LPAREN columns RPAREN VALUES LPAREN values RPAREN
@@ -138,15 +143,11 @@ def p_param_value(p):
     value : param
     """
     p[0] = Value(p[1], Value.VALUE_TYPE_PARAM)
-def p_select(p):
+def p_function_value(p):
     """
-    select : SELECT columns FROM tables
-           | SELECT columns FROM tables WHERE conds
+    value : function
     """
-    if len(p) == 5:
-        p[0] = Select(p[2], p[4])
-    elif len(p) == 7:
-        p[0] = Select(p[2], p[4], p[6])
+    p[0] = Value(p[1], Value.VALUE_TYPE_FUNCTION)
 def p_columns(p):
     """
     columns : column
@@ -159,36 +160,22 @@ def p_columns(p):
         p[0].append(p[3])
 def p_column(p):
     """
-    column : column_v
-           | column_v IDENTIFIER
-           | column_v AS IDENTIFIER
+    column : value
+           | value IDENTIFIER
+           | value AS IDENTIFIER
     """
-    p[0] = p[1]
     if len(p) == 2:
-        pass
+        p[0] = Column("", p[1])
+        if p[1].type == Value.VALUE_TYPE_COLUMN:
+            p[0].name = p[1].ent.split('.')[-1]
+        else:
+            p[0].name = str(p[1].ent)
     # SUBS_ID ID or SUBS.SUBS_ID ID
     elif len(p) == 3:
-        p[1].name = p[2]
+        p[0] = Column(p[2], p[1])
     # SUBS_ID AS ID or SUBS.SUBS_ID as ID
     elif len(p) == 4:
-        p[1].name = p[3]
-def p_normal_column(p):
-    """
-    column_v : IDENTIFIER
-    """
-    p[0] = Column(p[1].split('.')[-1], p[1], Column.COLUMN_TYPE_ENTITY)
-def p_literal_column(p):
-    """
-    column_v : INTEGER
-             | FLOAT
-             | STRING
-    """
-    p[0] = Column(str(p[1]), p[1], Column.COLUMN_TYPE_LITERAL)
-def p_function_column(p):
-    """
-    column_v : function
-    """
-    p[0] = Column(p[1].name, p[1], Column.COLUMN_TYPE_FUNCTION)
+        p[0] = Column(p[3], p[1])
 def p_tables(p):
     """
     tables : table
@@ -214,9 +201,9 @@ def p_subselect_table(p):
           | LPAREN select RPAREN IDENTIFIER
     """
     if len(p) == 4:
-        p[0] = Column("__SUBSELECT__", p[2], Table.TABLE_TYPE_SUBSELECT)
+        p[0] = Table("__SUBSELECT__", p[2], Table.TABLE_TYPE_SUBSELECT)
     else:
-        p[0] = Column(p[4], p[2], Table.TABLE_TYPE_SUBSELECT)
+        p[0] = Table(p[4], p[2], Table.TABLE_TYPE_SUBSELECT)
 def p_where(p):
     """
     where : WHERE conds
@@ -279,7 +266,7 @@ def p_function(p):
     p[0] = p[1]
 def p_func_nvl(p):
     """
-    func_nvl : NVL LPAREN IDENTIFIER COMMA column_v RPAREN
+    func_nvl : NVL LPAREN value COMMA value RPAREN
     """
     p[0] = Function("NVL", [p[3], p[5]])
 def p_error(p):

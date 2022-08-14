@@ -1,6 +1,6 @@
 import database_mocker.ysql as ysql
 import itertools
-from typing import List,Dict,Tuple,Union
+from typing import Any, List,Dict,Tuple,Union
 
 __all__ = ["Table", "Database", "Session", "DBS", "SESSIONS"]
 
@@ -12,6 +12,12 @@ class Table:
     def clear(self):
         self.records = []
     def insert_record(self, data: Dict[str, Union[str,int]]):
+        '''
+        insert a record into  this table
+            record's key is column
+            record's value is column value
+            the columns which specified will be None
+        '''
         record = []
         for col in self.columns:
             if col in data.keys():
@@ -19,6 +25,11 @@ class Table:
             else:
                 record.append(None)
         self.records.append(record)
+    def insert_records(self, data: List[Tuple]):
+        '''
+        insert some records into this table, you must specify all value of columns by order
+        '''
+        self.records.extend(data)
     def get_all_records(self):
         res = []
         for record in self.records:
@@ -63,13 +74,21 @@ class Database:
         else:
             return "NoThing!!!!!!!!!!!!!!"
     def execute_select(self, select: ysql.Select):
+        # 获取所有表的数据
+        # {"table1": [data,]}
         all_records = self.__fetech_data(select)
 
+        # 所有数据加上表名
+        # [[table1_data,], [table2_data,], [table3_data,]]
+        # tableX_data = {"tableX": data}
         __product_records = []
         for table, recs in all_records.items():
             __product_records.append([])
             for rec in recs:
                 __product_records[-1].append({ table: rec })
+                
+        # 不同表数据之间进行笛卡尔组合，最终得到的记录形式为
+        # {table1: dataX, table2: dataX, table3: dataX,}
         def record_product_to_dict(product: Tuple[Dict]):
             ans = {}
             for factor in product:
@@ -77,40 +96,11 @@ class Database:
             return ans
         product_records_generator = map(record_product_to_dict, itertools.product(*__product_records, repeat=1))
         
+        # 对得到的记录进行过滤
         ret_records = []
         for rec in product_records_generator:
             if self.__where_filter(select.where, rec, select.params):
-                ret_rec = {}
-                for res_column in select.columns:
-                    # literal column result
-                    if res_column.type == ysql.Column.COLUMN_TYPE_LITERAL:
-                        ret_rec[res_column.name] = res_column.value
-                        continue
-
-                    def extract_column_value(column_name: str):
-                        tmp = column_name.split(".")
-                        table_ref = list(rec.keys())[0]
-                        column_ref = tmp[-1]
-                        if len(tmp) == 2:
-                            table_ref = tmp[0]
-                        #SEQ.NEXTVAL
-                        if column_name.endswith(".NEXTVAL"):
-                            return self.sequences[table_ref].nextval()
-                        #TABLE.COLUMN
-                        else:
-                            return rec[table_ref][column_ref]
-
-                    if res_column.type == ysql.Column.COLUMN_TYPE_FUNCTION:
-                        value = None
-                        #NVL(XXXX, default)
-                        if res_column.value.name == "NVL":
-                            value = extract_column_value(res_column.value.params[0])
-                            value = value or res_column.value.params[1].value
-
-                        ret_rec[res_column.name] = value
-                    else:
-                        value = extract_column_value(res_column.value)
-                        ret_rec[res_column.name] = value
+                ret_rec = self.__generate_result(select, rec, select.params)
                 ret_records.append(ret_rec)
         return ret_records
 
@@ -135,6 +125,32 @@ class Database:
             else:
                 all_records[table.name] = self.tables[table.ent].get_all_records()
         return all_records
+    def __extract_value(self, value: ysql.Value, full_column_data: Dict[str, Dict], sql_params: Dict[str, Union[str, int]]):
+        if value.type == ysql.Value.VALUE_TYPE_LITERAL:
+            return value.ent
+        elif value.type == ysql.Value.VALUE_TYPE_PARAM:
+            return sql_params[value.ent]
+        elif value.type == ysql.Value.VALUE_TYPE_COLUMN:
+            tmp = value.ent.split('.')
+            value_column = tmp[-1]
+            value_table = list(full_column_data.keys())[0]
+            if len(tmp) == 2:
+                value_table = tmp[0]
+            # 序列
+            if value.ent.endswith('.NEXTVAL'):
+                return self.sequences[value_table].nextval()
+            # 表数据
+            else:
+                return full_column_data[value_table][value_column]
+        elif value.type == ysql.Value.VALUE_TYPE_FUNCTION:
+            ret_value = None
+            #NVL(XXXX, default)
+            if value.ent.name == "NVL":
+                ret_value = self.__extract_value(value.ent.params[0], full_column_data, sql_params)
+                ret_value = ret_value or self.__extract_value(value.ent.params[1], full_column_data, sql_params)
+            return ret_value
+        else:
+            return None
     def __where_filter(self, where: List[ysql.CondGroup], data: Dict, params: Dict[str, str]):
         """
         根据sql中的where条件对数据进行过滤，其中data的格式参考函数__fetch_data
@@ -154,19 +170,6 @@ class Database:
             "IS": lambda left, right: left is right,
             "IS NOT": lambda left, right: left is not right
         }
-        # 提取条件列的值: 因为条件列可能有多种形式，1. 数字 2. 字符串 3. 表字段 4. 参数 
-        def extract_cond_value(cond_operand: ysql.Value):
-            if cond_operand.type == ysql.Value.VALUE_TYPE_LITERAL:
-                return cond_operand.ent
-            elif cond_operand.type == ysql.Value.VALUE_TYPE_PARAM:
-                return params[cond_operand.ent]
-            elif cond_operand.type == ysql.Value.VALUE_TYPE_COLUMN:
-                cond_detail = cond_operand.ent.split(".")
-                column = cond_detail[-1]
-                table = list(data.keys())[0]
-                if len(cond_detail) == 2:
-                    table = cond_detail[0]
-                return data[table][column]
 
         for cond_group in where:
             match = True
@@ -174,15 +177,23 @@ class Database:
                 if cond.cond_groups is not None:
                     match = match and self.__where_filter(cond.cond_groups, data)
                 else:
-                    left_value = extract_cond_value(cond.left)
-                    right_value = extract_cond_value(cond.right)
+                    left_value = self.__extract_value(cond.left, data, params)
+                    right_value = self.__extract_value(cond.right, data, params)
                     match = match and cmp_funcs[cond.op](left_value, right_value)
                 if not match:
                     break
             if match:
                 return True
         return False
-
+    def __generate_result(self, select: ysql.Select, full_column_data: Dict[str, Dict], sql_params: Dict[str, Any]) -> Dict[str, Union[str, int]]:
+        '''
+        根据SQL中的结果列信息，构造一条返回数据
+        '''
+        # 根据SQL中的结果列信息，构造返回数据
+        ret_rec = {}
+        for res_column in select.columns:
+            ret_rec[res_column.name] = self.__extract_value(res_column.value, full_column_data, sql_params)
+        return ret_rec
     def execute_insert(insert: ysql.Insert) -> int:
         # TODO
         return 0
