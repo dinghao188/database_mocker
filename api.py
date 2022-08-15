@@ -1,6 +1,7 @@
-from typing import List,Dict,Union
+from typing import List,Dict,Union,Tuple
 from database_mocker.database import *
 import database_mocker.ysql as ysql
+import traceback
 
 __all__ = ["Attach", "Detach", "SetSQL", "Execute", "FetchOne"]
 
@@ -30,12 +31,11 @@ def SetSQL(session_id: int, sql: str) -> List[str]:
             ans.append(column.name)
     return ans
 def Execute(session_id: int) -> int:
-    import traceback
     try:
-        print("Execute", session_id, DBS, SESSIONS)
         if session_id not in SESSIONS.keys():
             return 1
         session = SESSIONS[session_id]
+        session.clear_cursor()
         if session.stmt is None:
             return 2
         if isinstance(session.stmt, ysql.Select):
@@ -46,27 +46,31 @@ def Execute(session_id: int) -> int:
     except Exception as e:
         traceback.print_exc()
         return 3
-def FetchOne(session_id: int) -> Dict[str, Union[str, int]]:
+def FetchOne(session_id: int) -> Dict[str, Union[str, int, float]]:
     if session_id not in SESSIONS.keys():
         return {}
     session = SESSIONS[session_id]
     record = session.fetchone() or {}
     return record
-def FetchOneWithOrder(session_id: int) -> List[Union[str, int]]:
+def FetchCurRawData(session_id: int) -> Tuple[Union[str, int, float]]:
     if session_id not in SESSIONS.keys():
         return []
     session = SESSIONS[session_id]
-    record = session.fetchone_with_order() or []
+    record = session.fetch_cur_rawdata() or ()
     return record
 
-def __SetParameter(session_id: int, param: str, val: Union[int,float,str,None]):
-    if session_id not in SESSIONS.keys():
+def __SetParameter(session_id: int, param: str, val: Union[int, float, str]):
+    try:
+        if session_id not in SESSIONS.keys():
+            return False
+        session = SESSIONS[session_id]
+        if param not in session.stmt.params.keys():
+            return False
+        session.stmt.params[param] = val
+        return True
+    except Exception as e:
+        traceback.print_exc()
         return False
-    session = SESSIONS[session_id]
-    if param not in session.stmt.params.keys():
-        return False
-    session.stmt.params[param] = val
-    return True
 
 def SetParameterNULL(session_id: int, param: str):
     __SetParameter(session_id, param, None)

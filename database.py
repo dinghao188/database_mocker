@@ -35,6 +35,19 @@ class Table:
         for record in self.records:
             res.append(dict(zip(self.columns, record)))
         return res
+    def get_record(self, data: Dict[str, Union[str, int, float]]):
+        '''
+        按存放结构返回一条和data各字段都吻合的数据
+        '''
+        for rec in self.records:
+            match = True
+            for i, col in enumerate(self.columns):
+                if col in data.keys() and data[col] is not None and data[col] != rec[i]:
+                    match = False
+                    break
+            if match:
+                return rec
+        return None
 
 class Sequence:
     def __init__(self, name: str, init_val: int, step: int):
@@ -194,7 +207,7 @@ class Database:
         for res_column in select.columns:
             ret_rec[res_column.name] = self.__extract_value(res_column.value, full_column_data, sql_params)
         return ret_rec
-    def execute_insert(insert: ysql.Insert) -> int:
+    def execute_insert(self, insert: ysql.Insert) -> int:
         # TODO
         return 0
 
@@ -205,28 +218,32 @@ class Session:
     def __init__(self, session_id, db_name):
         self.session_id = session_id
         self.db_name = db_name
-
-        self.stmt = None
-        self.cursor_data = None
-        self.cursor_pos = 0
+        self.clear()
     def clear(self):
         self.stmt = None
+        self.clear_cursor()
+    def clear_cursor(self):
         self.cursor_data = None
-        self.cursor_pos = 0
-    def fetchone(self):
+        self.cursor_pos = -1
+    def fetchone(self) -> Dict[str, Union[str, int, float]]:
+        if not isinstance(self.stmt, ysql.Select):
+            return None
+        self.cursor_pos += 1
+        if self.cursor_data is None or self.cursor_pos >= len(self.cursor_data):
+            return None
+        data = self.cursor_data[self.cursor_pos]
+        return data
+    def fetch_cur_rawdata(self) -> Tuple[Union[str, int, float]]:
+        '''
+        获取当前游标下的数据，返回结果是对应表的按顺序的列值列表
+        '''
         if not isinstance(self.stmt, ysql.Select):
             return None
         if self.cursor_data is None or self.cursor_pos >= len(self.cursor_data):
             return None
         data = self.cursor_data[self.cursor_pos]
-        self.cursor_pos += 1
+        data = DBS[self.db_name][self.stmt.tables[0].ent].get_record(data) or ()
         return data
-    def fetchone_with_order(self):
-        data = self.fetchone() or {}
-        ret = []
-        for col in self.stmt.columns:
-            ret.append(data[col.name])
-        return ret
 
 DBS: Dict[str, Database] = {}
 SESSIONS: Dict[int, Session] = {}

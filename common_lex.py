@@ -31,7 +31,8 @@ def t_ORDER_BY(t):
 function = [
     "MAX",
     "COUNT",
-    "NVL"
+    "NVL",
+    "TO_DATE"
 ]
 def t_MAX(t):
     r'MAX'
@@ -41,6 +42,9 @@ def t_COUNT(t):
     return t
 def t_NVL(t):
     r'NVL'
+    return t
+def t_TO_DATE(t):
+    r'TO_DATE'
     return t
 
 
@@ -83,11 +87,11 @@ def t_IDENTIFIER(t):
         t.type = t.value
     return t
 def t_INTEGER(t):
-    r'\d+'
+    r'-?\d+'
     t.value = int(t.value)
     return t
 def t_FLOAT(t):
-    r'\d+\.\d+'
+    r'-?\d+\.\d+'
     t.value = float(t.value)
     return t
 def t_STRING(t):

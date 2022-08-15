@@ -40,4 +40,24 @@ def test_api():
     print(api.FetchOneWithOrder(si))
     print(api.FetchOneWithOrder(si))
     api.Detach(si)
+    
+    DBS.clear()
+    SESSIONS.clear()
     print("======================================================")
+
+def test_FetchRawData():
+    db = Database("CC")
+    db.create_table("SUBS", ("SUBS_ID", "SUBS_NAME", "SUBS_SEQ"))
+    db["SUBS"].insert_records([
+        (0, "dinghao", 0),
+        (1, "dinghaoyan", 0)])
+    DBS[db.name] = db
+    
+    si = api.Attach("CC")
+    api.SetSQL(si, "SELECT SUBS_ID FROM SUBS WHERE SUBS_ID < 10")
+    api.Execute(si)
+    
+    print(api.FetchOne(si))
+    print(api.FetchRawData(si))
+    print(api.FetchOne(si))
+    print(api.FetchRawData(si))

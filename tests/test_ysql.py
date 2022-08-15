@@ -60,3 +60,9 @@ def test_param():
     stmt = ysql.parser.parse("SELECT * FROM PROD WHERE PROD_ID=:ID AND PROD_SEQ=:SEQ")
     print("PARAMS =========>")
     print(stmt.params)
+
+def test_function():
+    stmt = ysql.parser.parse("SELECT TO_DATE(:SUBS_ID, '123213213'), NVL(:SUBS_NAME, '') FROM SUBS")
+    print("COLUMNS =========>")
+    for column in stmt.columns:
+        print(column)

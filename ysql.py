@@ -80,7 +80,7 @@ class Select:
         pass
     
 class Insert:
-    def __init__(self, table: str, columns: List[Column], values: List[Value], params = None):
+    def __init__(self, table: str, columns: List[str], values: List[Value], params = None):
         self.table = table
         self.columns = columns
         self.values = values
@@ -110,12 +110,22 @@ def p_select(p):
     p[0] = Select(columns, tables, conds)
 def p_insert(p):
     """
-    insert : INSERT_INTO table LPAREN columns RPAREN VALUES LPAREN values RPAREN
+    insert : INSERT_INTO table LPAREN identifiers RPAREN VALUES LPAREN values RPAREN
     """
     table = p[2]
     columns = p[4]
     values = p[8]
     p[0] = Insert(table, columns, values)
+def p_identifiers(p):
+    """
+    identifiers : IDENTIFIER
+                | identifiers COMMA IDENTIFIER
+    """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1]
+        p[0].append(p[3])
 def p_values(p):
     """
     values : value
@@ -204,11 +214,6 @@ def p_subselect_table(p):
         p[0] = Table("__SUBSELECT__", p[2], Table.TABLE_TYPE_SUBSELECT)
     else:
         p[0] = Table(p[4], p[2], Table.TABLE_TYPE_SUBSELECT)
-def p_where(p):
-    """
-    where : WHERE conds
-    """
-    p[0] = p[2]
 def p_conds(p):
     """
     conds : cond
@@ -262,6 +267,7 @@ def p_param(p):
 def p_function(p):
     """
     function : func_nvl
+             | func_to_date
     """
     p[0] = p[1]
 def p_func_nvl(p):
@@ -269,7 +275,13 @@ def p_func_nvl(p):
     func_nvl : NVL LPAREN value COMMA value RPAREN
     """
     p[0] = Function("NVL", [p[3], p[5]])
+def p_func_to_date(p):
+    """
+    func_to_date : TO_DATE LPAREN value COMMA value RPAREN
+    """
+    p[0] = Function("TO_DATE", [p[3], p[5]])
 def p_error(p):
-    pass
+    if p:
+        print("Syntax error at token", p.type, p.value)
 
 parser = yacc.yacc()
