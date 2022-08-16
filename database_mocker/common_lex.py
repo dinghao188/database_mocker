@@ -28,50 +28,36 @@ def t_ORDER_BY(t):
 
 
 #function
-function = [
+functions = [
     "MAX",
     "COUNT",
     "NVL",
     "TO_DATE"
 ]
-def t_MAX(t):
-    r'MAX'
-    return t
-def t_COUNT(t):
-    r'COUNT'
-    return t
-def t_NVL(t):
-    r'NVL'
-    return t
-def t_TO_DATE(t):
-    r'TO_DATE'
-    return t
-
 
 #all tokens we need
 tokens = [
-    "IDENTIFIER", #basic identifier for table name, column name , etc.
-    "INTEGER",    #literal interger
-    "FLOAT",      #literal float
-    "STRING",     #literal string
-    "COMMA",      #,
-    "COLON",      #:
-    "STAR",       #*
-    "LPAREN",     #(
-    "RPAREN",     #)
-    "EQ",         #=
-    "NE",         #<>
-    "LT",         #<
-    "GT",         #>
+    "IDENTIFIER",     #basic identifier for table name, column name , etc.
+    "PARAM",          #sql named param
+    "INTEGER",        #literal interger
+    "FLOAT",          #literal float
+    "STRING",         #literal string
+    "COMMA",          #,
+    "STAR",           #*
+    "LPAREN",         #(
+    "RPAREN",         #)
+    "EQ",             #=
+    "NE",             #<>
+    "LT",             #<
+    "GT",             #>
     *single_keywords,
     *conbined_keywords,
-    *function
+    *functions
 ]
 
 t_ignore = ' \t\n'
 
 t_COMMA = r','
-t_COLON = r':'
 t_STAR = r'\*'
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
@@ -83,8 +69,11 @@ t_GT = r'>'
 def t_IDENTIFIER(t):
     r'[a-zA-Z_\*][a-zA-Z0-9_\.]*'
     t.type = "IDENTIFIER"
-    if t.value in single_keywords:
+    if t.value in single_keywords or t.value in functions:
         t.type = t.value
+    return t
+def t_PARAM(t):
+    r':[a-zA-Z_][a-zA-Z0-9_]*'
     return t
 def t_INTEGER(t):
     r'-?\d+'
@@ -95,7 +84,7 @@ def t_FLOAT(t):
     t.value = float(t.value)
     return t
 def t_STRING(t):
-    r'\'.*\''
+    r'\'.*?\''
     t.value = t.value.split("'")[1]
     return t
 

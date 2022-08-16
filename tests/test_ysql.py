@@ -19,50 +19,48 @@ def test_lexer_select_inner():
         tok = ysql.lexer.token()
 
 def test_yacc_select():
-    stmt = ysql.parser.parse("""
+    sql = """
     SELECT A.SUBS_ID, A.SUBS_SEQ AS NAME, A.ACCT_ID, 1 ID
       FROM SUBS A, ACCT, (SELECT * FROM PROD) C
      WHERE A.SUBS_ID = C.PROD_ID AND (A.ACCT_ID<>ACCT_ID OR A.ACCT_SEQ > 0) AND 1=1 OR 1=2 AND A.SUBS_SEQ=:SEQ
-    """)
+    """
+    stmt = ysql.parser.parse(sql)
     assert isinstance(stmt, ysql.Select)
     
-    print("COLUMNS =========>")
-    for column in stmt.columns:
-        print(column)
-    print("TABLES ==========>")
-    for table in stmt.tables:
-        print(table)
-    print("CONDS  ==========>")
-    for cond_group in stmt.where:
-        print(cond_group)
+    print(sql)
+    print("COLUMNS ==>", [str(col) for col in stmt.columns])
+    print("TABLES  ==>", [str(tab) for tab in stmt.tables])
+    print("CONDS   ==>", stmt.where)
 
 def test_yacc_insert():
-    stmt = ysql.parser.parse("""
-    INSERT INTO SUBS(SUBS_ID, SUBS_SEQ, SUBS_NAME) VALUES(1, 0, "dinghao")
-    """)
+    sql = "INSERT INTO SUBS(SUBS_ID, SUBS_SEQ, SUBS_NAME) VALUES(1, 0, 'dinghao')"
+    stmt = ysql.parser.parse(sql)
     assert isinstance(stmt, ysql.Insert)
     
-    print("COLUMNS =========>")
-    for column in stmt.columns:
-        print(column)
-    print("TABLE ========> ", stmt.table)
-    print("VALUES ==========>")
-    for value in stmt.values:
-        print(value)
+    print(sql)
+    print("COLUMNS ==>", stmt.columns)
+    print("TABLE   ==> ", stmt.table)
+    print("VALUES  ==>", [str(v) for v in stmt.values])
 
 def test_param():
-    stmt = ysql.parser.parse("SELECT * FROM SUBS WHERE SUBS_ID = :ID")
+    sql = "SELECT * FROM SUBS WHERE SUBS_ID = :ID"
+    stmt = ysql.parser.parse(sql)
     assert isinstance(stmt, ysql.Select)
     
-    print("PARAMS =========>")
-    print(stmt.params)
+    print(sql)
+    print("PARAMS ==>", stmt.params)
     
-    stmt = ysql.parser.parse("SELECT * FROM PROD WHERE PROD_ID=:ID AND PROD_SEQ=:SEQ")
-    print("PARAMS =========>")
-    print(stmt.params)
+    sql = "SELECT * FROM PROD WHERE PROD_ID=:ID AND PROD_SEQ=:SEQ"
+    stmt = ysql.parser.parse(sql)
+    assert isinstance(stmt, ysql.Select)
+
+    print(sql)
+    print("PARAMS ==>", stmt.params)
 
 def test_function():
-    stmt = ysql.parser.parse("SELECT TO_DATE(:SUBS_ID, '123213213'), NVL(:SUBS_NAME, '') FROM SUBS")
-    print("COLUMNS =========>")
-    for column in stmt.columns:
-        print(column)
+    sql = "SELECT TO_DATE(SUBS_ID, '123213213') , NVL(:SUBS_NAME, '') SUBS_NAME FROM SUBS"
+    stmt = ysql.parser.parse(sql)
+    assert isinstance(stmt, ysql.Select)
+    
+    print(sql)
+    print("COLUMNS ==>", [str(col) for col in stmt.columns])

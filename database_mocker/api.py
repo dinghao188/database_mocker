@@ -12,7 +12,7 @@ def Attach(db_name) -> int:
     print("Attach", db_name, __session_id, DBS)
     if db_name not in DBS.keys(): 
         return 0
-    SESSIONS[__session_id] = Session(__session_id, db_name)
+    Session(__session_id, db_name)
     old_id = __session_id
     __session_id += 1
     return old_id
@@ -71,7 +71,6 @@ def __SetParameter(session_id: int, param: str, val: Union[int, float, str]):
     except Exception as e:
         traceback.print_exc()
         return False
-
 def SetParameterNULL(session_id: int, param: str):
     __SetParameter(session_id, param, None)
 def SetParameterDouble(session_id: int, param: str, val: float):

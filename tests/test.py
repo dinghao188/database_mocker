@@ -1,25 +1,36 @@
-import database_mocker.ysql as ysql
-from database_mocker.database import Database, Table, DBS
-import database_mocker.api as api
-
 def test_foo():
-    stmt = ysql.parser.parse("""
-    SELECT SESSION_ID,
-           NVL(RESERVE_TIMES,-1) RESERVE_TIMES,
-           EXP_TIME,
-           SERV_BEGIN_TIME,
-           NVL(SUBS_ID,-1) SUBS_ID,
-           NVL(UNIT_RESERVE,-1) UNIT_RESERVE,
-           NVL(UNIT_TYPE,-1) UNIT_TYPE,
-           NVL(UNIT_USED,-1) UNIT_USED,
-           NVL(PID_INFO,'') PID_INFO,
-           NVL(RATING_FLOW_ID,-1) RATING_FLOW_ID,
-           NVL(EXT_ATTR,'') EXT_ATTR,
-           NVL(CCR_NUMBER,-1) CCR_NUMBER
-    FROM OCS_SESSION
-    WHERE SESSION_ID = :SESSION_ID
-    """)
+    import database_mocker.api as api
+    from database_mocker.database import Database
 
-    print("COLUMNS========>")
-    for col in stmt.columns:
-        print(col)
+    # 1. first create a database called TESTDB, and
+    db = Database("TESTDB")
+    # then create a table named PERSON, and with bellow columns
+    db.create_table("PERSON", ("ID", "NAME", "AGE", "PHONE"))
+
+    # 2. insert some data into this table
+    # this methods must specify all values of every column
+    db["PERSON"].insert_records([
+    (1, "Jack", 18, "999"),
+    (2, "Mary", 20, "12389232"),
+    (3, "Tom", 35, None)
+    ])
+    # or you can try to use this method to insert a single record with specified column
+    #      value of columns which are not specified will be None
+    db["PERSON"].insert_record({
+    "ID": 4,
+    "NAME": "Tony",
+    })
+
+    # 3. use api to operate this database
+    ## 3.1 attach to database and acquire a unique session_id
+    session_id = api.Attach("TESTDB")
+    ## 3.2 prepare a sql you want
+    api.SetSQL(session_id, "SELECT ID PERSON_ID, NAME, AGE, PHONE FROM PERSON")
+    ## 3.3 execute, this will fetch all data and store it in current session
+    api.Execute(session_id)
+    ## 3.4 fetch data, FetchOne will return a key value data, until cursor at the end, an empty Dict will be returned
+    print(api.FetchOne(session_id))
+    print(api.FetchOne(session_id))
+    print(api.FetchOne(session_id))
+    print(api.FetchOne(session_id))
+    print(api.FetchOne(session_id))

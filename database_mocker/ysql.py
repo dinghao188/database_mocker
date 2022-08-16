@@ -26,7 +26,7 @@ class Column:
         self.name = name
         self.value = value
     def __str__(self):
-        return "{}, {}".format(self.name, self.value)
+        return "{}:{}".format(self.name, self.value)
 
 class Function:
     def __init__(self, name, params: List = None):
@@ -42,7 +42,7 @@ class Table:
         self.ent = ent
         self.type = type
     def __str__(self):
-        return "{}, {}".format(self.name, self.ent)
+        return "{}:{}".format(self.name, self.ent)
 
 class CondOperand:
     def __init__(self, ent, type):
@@ -110,7 +110,7 @@ def p_select(p):
     p[0] = Select(columns, tables, conds)
 def p_insert(p):
     """
-    insert : INSERT_INTO table LPAREN identifiers RPAREN VALUES LPAREN values RPAREN
+    insert : INSERT_INTO IDENTIFIER LPAREN identifiers RPAREN VALUES LPAREN values RPAREN
     """
     table = p[2]
     columns = p[4]
@@ -136,24 +136,31 @@ def p_values(p):
     else:
         p[0] = p[1]
         p[0].append(p[3])
-def p_literal_value(p):
+def p_value_literal(p):
     """
     value : INTEGER
           | FLOAT
           | STRING
     """
     p[0] = Value(p[1], Value.VALUE_TYPE_LITERAL)
-def p_column_value(p):
+def p_value_column(p):
     """
     value : IDENTIFIER
     """
     p[0] = Value(p[1], Value.VALUE_TYPE_COLUMN)
-def p_param_value(p):
+def p_param(p):
+    """
+    param : PARAM
+    """
+    param_name = p[1][1:]
+    params[param_name] = None
+    p[0] = param_name
+def p_value_param(p):
     """
     value : param
     """
     p[0] = Value(p[1], Value.VALUE_TYPE_PARAM)
-def p_function_value(p):
+def p_value_function(p):
     """
     value : function
     """
@@ -241,29 +248,12 @@ def p_cond_combine(p):
     cond : LPAREN conds RPAREN
     """
     p[0] = Cond(cond_groups=p[2])
-def p_cond_operand_literal(p):
+def p_cond_operand(p):
     """
-    cond_operand : STRING
-                 | INTEGER
-                 | FLOAT
+    cond_operand : value
     """
-    p[0] = Value(p[1], Value.VALUE_TYPE_LITERAL)
-def p_cond_operand_entity(p):
-    """
-    cond_operand : IDENTIFIER
-    """
-    p[0] = Value(p[1], Value.VALUE_TYPE_COLUMN)
-def p_cond_operand_param(p):
-    """
-    cond_operand : param
-    """
-    p[0] = Value(p[1], Value.VALUE_TYPE_PARAM)
-def p_param(p):
-    """
-    param : COLON IDENTIFIER
-    """
-    params[p[2]] = None
-    p[0] = p[2]
+    p[0] = p[1]
+
 def p_function(p):
     """
     function : func_nvl

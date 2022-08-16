@@ -67,6 +67,9 @@ class Database:
         self.tables : Dict[str, Table] = {}
         self.sequences : Dict[str, Sequence] = {}
         self.name = name
+        
+        global DBS
+        DBS[name] = self
     #Clear all data, but keep all tables and sequences
     def clear(self):
         for table in self.tables.values():
@@ -219,6 +222,9 @@ class Session:
         self.session_id = session_id
         self.db_name = db_name
         self.clear()
+        
+        global SESSIONS
+        SESSIONS[session_id] = self
     def clear(self):
         self.stmt = None
         self.clear_cursor()
